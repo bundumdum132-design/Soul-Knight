@@ -22,6 +22,15 @@ test('versioned meta save round-trips permanent data and never stores run state'
   assert.equal(storage.getItem(saveKeyForTests()) !== null, true);
 });
 
+test('legacy save migrates into class upgrades, ticket, loadout, and farm fields', () => {
+  const migrated = normalizeSave({ version: 1, unlockedHeroes: ['sable', 'luma'], permanentHp: 4, lastHero: 'luma', memory: 19 });
+  assert.deepEqual(migrated.unlockedClasses, ['vanguard', 'ranger']);
+  assert.equal(migrated.lastClass, 'ranger');
+  assert.equal(migrated.classUpgrades.vanguard.vitality, 2, 'old heart upgrades are bounded during migration');
+  assert.equal(migrated.weaponTickets, 1);
+  assert.deepEqual(migrated.farm.plots, [null, null, null]);
+});
+
 test('unsupported newer saves fall back safely; malformed saves normalize', () => {
   assert.equal(normalizeSave({ version: 99, memory: 100 }).memory, 0);
   const malformed = normalizeSave({ version: 1, memory: -4, settings: { master: 4, sfx: 'loud' } });

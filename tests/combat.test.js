@@ -15,7 +15,7 @@ function dummy(x, y) {
 test('aimed ranged attacks apply burn, melee connects at close range, and burn expires', () => {
   const game = createGame();
   try {
-    game.startNewRun('luma');
+    game.startNewRun('ranger');
     game.currentRoom.enemies = [dummy(267, 180)];
     game.run.player.x = 240; game.run.player.y = 180; game.run.player.aim = { x: 1, y: 0 };
     game.run.player.attackCd = 0;
@@ -27,14 +27,14 @@ test('aimed ranged attacks apply burn, melee connects at close range, and burn e
     for (let i = 0; i < 6 && rangedTarget.alive; i++) game.updateEnemies(.4);
     assert.ok(rangedTarget.burn <= 0, 'burn has an expiration rather than refreshing itself forever');
 
-    game.startNewRun('sable');
+    game.startNewRun('vanguard');
     const meleeTarget = dummy(260, 180);
     game.currentRoom.enemies = [meleeTarget];
     game.run.player.x = 240; game.run.player.y = 180; game.run.player.aim = { x: 1, y: 0 };
     game.run.player.attackCd = 0;
     game.tryAttack();
     assert.ok(meleeTarget.hp < meleeTarget.maxHp, 'the close-range sweep deals damage in its facing arc');
-    assert.equal(game.run.player.passiveCount, 1, 'Sable builds the passive only by landing a melee hit');
+    assert.equal(game.run.player.passiveCount, 1, 'Vanguard builds the passive only by landing a melee hit');
   } finally {
     game.sound.stop(); game.input.destroy();
     delete globalThis.window; delete globalThis.document;

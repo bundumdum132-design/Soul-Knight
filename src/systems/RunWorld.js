@@ -1,5 +1,5 @@
 import { ROOM, clamp, dist, norm } from '../constants.js';
-import { HEROES, WEAPONS, BUFFS, SHOP_STOCK } from '../content.js';
+import { CLASSES, WEAPONS, BUFFS, SHOP_STOCK } from '../content.js';
 import { generateFloor, directionBetween } from '../dungeon.js';
 import { makeRng, randomSeed, pick } from '../rng.js';
 import { persistSave } from '../save.js';
@@ -7,27 +7,39 @@ import { makeBoss, makeEnemy, makeEncounter, makeProps } from '../encounters.js'
 import { OPPOSITE, SPAWN_POINTS, SAFE_ROOM_TYPES } from './shared.js';
 
 export class RunWorld {
-  startNewRun(heroId = 'sable') {
+  startNewRun(classId = 'vanguard', ticketWeapon = null) {
     this.sound.unlock();
     this.sound.play('portal');
-    this.lastHero = heroId;
-    const hero = HEROES[heroId] || HEROES.sable;
+    const classInfo = CLASSES[classId] || CLASSES.vanguard;
+    classId = classInfo.id;
+    this.lastClass = classId;
+    this.selectedClass = classId;
+    this.save.lastClass = classId;
+    const upgrades = this.save.classUpgrades?.[classId] || { vitality: 0, reservoir: 0, mastery: 0 };
     const seed = randomSeed();
-    const maxHp = hero.maxHp + this.save.permanentHp * 4;
+    const maxHp = classInfo.maxHp + upgrades.vitality;
+    const maxEnergy = classInfo.maxEnergy + upgrades.reservoir * 12;
+    const chosenSecondary = ticketWeapon || this.save.preparedWeapon || this.save.loadouts?.[classId];
+    const secondaryWeapon = WEAPONS[chosenSecondary] && chosenSecondary !== classInfo.primary ? chosenSecondary : classInfo.secondary;
+    this.save.preparedWeapon = null;
+    const skillCost = Math.max(8, classInfo.skillCost - upgrades.mastery);
     this.run = {
-      heroId: hero.id, seed, floor: 1, level: 1, xp: 0, xpNext: 32, coins: 9,
-      buffs: [], weapons: [hero.primary, hero.secondary], activeSlot: 0,
+      classId, seed, floor: 1, level: 1, xp: 0, xpNext: 32, coins: 9,
+      buffs: [], weapons: [classInfo.primary, secondaryWeapon], activeSlot: 0,
       player: {
-        x: 240, y: 180, hp: maxHp, maxHp, speed: hero.speed, crit: hero.crit, attackMult: hero.attackMult,
-        armor: hero.armor, maxArmor: hero.armor, aim: { x: 1, y: 0 }, attackCd: 0, attackAnim: 0,
-        skillCd: 0, skillAnim: 0, dodgeCd: 0, dodgeTime: 0, invuln: 0, flow: 0, flowReady: false,
+        x: 240, y: 180, hp: maxHp, maxHp, speed: classInfo.speed, crit: classInfo.crit,
+        attackMult: classInfo.attackMult * (1 + upgrades.mastery * .025),
+        armor: classInfo.armor, maxArmor: classInfo.armor, aim: { x: 1, y: 0 }, attackCd: 0, attackAnim: 0,
+        currentEnergy: maxEnergy, maxEnergy, energyRegen: classInfo.energyRegen + upgrades.reservoir * .65,
+        skillCost, skillPower: 1 + upgrades.mastery * .04, skillCd: 0, skillAnim: 0,
+        energyWarning: 0, dodgeCd: 0, dodgeTime: 0, invuln: 0, flow: 0, flowReady: false,
         passiveCount: 0, barkBurst: false, armorTimer: 0, lastDamage: 0, moving: false,
       },
       stats: { roomsCleared: 0, enemiesDefeated: 0, bossesDefeated: 0, damageDealt: 0, damageTaken: 0, coinsCollected: 0, startedAt: performance.now(), weaponsUsed: {} },
     };
     this.save.stats.runs += 1;
     this.save.discoveries.weapons ||= [];
-    for (const weaponId of [hero.primary, hero.secondary]) {
+    for (const weaponId of [classInfo.primary, secondaryWeapon]) {
       if (!this.save.discoveries.weapons.includes(weaponId)) this.save.discoveries.weapons.push(weaponId);
     }
     persistSave(this.save);
@@ -183,8 +195,8 @@ export class RunWorld {
       title: 'THE LISTENING SHRINE',
       subtitle: 'Something beneath the stone offers a bargain.',
       options: [
-        { id: 'blood', title: 'PAY IN BLOOD', description: 'Lose 18 HP · gain a rare knot.', action: 'blood' },
-        { id: 'warmth', title: 'ASK FOR WARMTH', description: 'Restore up to 24 HP · no other price.', action: 'warmth' },
+        { id: 'blood', title: 'PAY IN BLOOD', description: 'Lose 1 Health · gain a rare knot.', action: 'blood' },
+        { id: 'warmth', title: 'ASK FOR WARMTH', description: 'Restore up to 2 Health · no other price.', action: 'warmth' },
         { id: 'amber', title: 'LEAVE AN OFFERING', description: 'Spend 7 amber · gain 18 amber back.', action: 'amber' },
       ],
     };
@@ -195,13 +207,13 @@ export class RunWorld {
     if (!this.eventData || !this.eventData.options[index]) return;
     const action = this.eventData.options[index].action;
     if (action === 'blood') {
-      this.run.player.hp = Math.max(1, this.run.player.hp - 18);
+      this.run.player.hp = Math.max(1, this.run.player.hp - 1);
       const rare = ['stormpollen', 'cinderblood', 'splitseed'].filter((id) => this.buffStacks(id) < BUFFS[id].maxStacks);
       this.grantBuff(rare.length ? pick(this.rng, rare) : 'quickbloom');
       this.showToast('The shrine takes a heartbeat and gives back a spark.');
     } else if (action === 'warmth') {
       const before = this.run.player.hp;
-      this.run.player.hp = Math.min(this.run.player.maxHp, this.run.player.hp + 24);
+      this.run.player.hp = Math.min(this.run.player.maxHp, this.run.player.hp + 2);
       this.showToast(`Warmth restored ${Math.round(this.run.player.hp - before)} HP.`);
     } else if (action === 'amber') {
       if (this.run.coins >= 7) { this.run.coins -= 7; this.run.coins += 18; this.showToast('The offering returns as a brighter handful.'); }

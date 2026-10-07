@@ -1,6 +1,6 @@
 :root {
   color-scheme: dark;
-  font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   background: #0c1417;
   color: #eee2bf;
   font-synthesis: none;
@@ -9,11 +9,11 @@
 * { box-sizing: border-box; }
 html, body, #app { width: 100%; height: 100%; margin: 0; }
 body { overflow: hidden; background: radial-gradient(ellipse at 50% 42%, #213637 0%, #0c1417 72%); }
-#app { position: relative; display: grid; place-items: center; padding: 26px; }
+#app { position: relative; display: grid; place-items: center; padding: 0; }
 canvas {
-  width: min(calc(100vw - 52px), calc((100vh - 52px) * 16 / 9));
-  height: auto;
-  max-height: calc(100vh - 52px);
+  display: block;
+  max-width: 100vw;
+  max-height: 100vh;
   aspect-ratio: 16 / 9;
   background: #17272b;
   image-rendering: pixelated;
@@ -25,15 +25,10 @@ canvas {
 }
 .corner-mark {
   position: absolute;
-  right: max(26px, calc((100vw - min(calc(100vw - 52px), calc((100vh - 52px) * 16 / 9))) / 2));
-  bottom: max(10px, calc((100vh - min(calc(100vh - 52px), calc((100vw - 52px) * 9 / 16))) / 2 - 22px));
+  right: 12px;
+  bottom: 10px;
   color: rgba(238,226,191,.42);
-  font: 9px 'DM Mono', monospace;
+  font: 9px ui-monospace, monospace;
   letter-spacing: .18em;
   pointer-events: none;
-}
-@media (max-width: 640px) {
-  #app { padding: 0; }
-  canvas { width: 100vw; max-height: none; outline: none; box-shadow: none; }
-  .corner-mark { display: none; }
 }

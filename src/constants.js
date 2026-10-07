@@ -1,5 +1,8 @@
 export const WIDTH = 480;
 export const HEIGHT = 270;
+export const RENDER_SCALE = 3;
+export const CANVAS_WIDTH = WIDTH * RENDER_SCALE;
+export const CANVAS_HEIGHT = HEIGHT * RENDER_SCALE;
 export const ROOM = Object.freeze({ left: 24, right: 456, top: 20, bottom: 250, centerX: 240, centerY: 135 });
 export const VERSION = '0.1.0';
 

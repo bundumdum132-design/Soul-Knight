@@ -1,5 +1,5 @@
 import { C, ROOM, WIDTH, HEIGHT } from './constants.js';
-import { ENEMIES, HEROES, WEAPONS, ELEMENT_COLORS, rarityColor } from './content.js';
+import { ENEMIES, CLASSES, WEAPONS, ELEMENT_COLORS, rarityColor } from './content.js';
 
 const fill = (ctx, color, x, y, w, h) => { ctx.fillStyle = color; ctx.fillRect(Math.round(x), Math.round(y), Math.ceil(w), Math.ceil(h)); };
 const line = (ctx, color, x1, y1, x2, y2, width = 1) => { ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
@@ -183,13 +183,13 @@ export function drawProp(ctx, prop, time = 0) {
   }
 }
 
-export function drawHero(ctx, id, x, y, aim, time, moving = false, invulnerable = 0, attacking = 0, skillFlash = 0) {
+export function drawClassSprite(ctx, id, x, y, aim, time, moving = false, invulnerable = 0, attacking = 0, skillFlash = 0) {
   if (invulnerable > 0 && Math.floor(time * 22) % 2 === 0) return;
   const bob = moving ? Math.sin(time * 19) * 1.4 : Math.sin(time * 3.4) * .7;
   const yy = Math.round(y + bob);
   fill(ctx, 'rgba(0,0,0,.36)', x - 10, yy + 8, 20, 6);
   // feet and trailing scarf
-  if (id === 'sable') {
+  if (id === 'vanguard') {
     fill(ctx, '#374843', x - 8, yy + 4, 5, 5); fill(ctx, '#374843', x + 3, yy + 4, 5, 5);
     fill(ctx, '#6b8057', x - 9, yy - 7, 18, 14);
     fill(ctx, '#8ead72', x - 8, yy - 9, 16, 10);
@@ -213,7 +213,7 @@ export function drawHero(ctx, id, x, y, aim, time, moving = false, invulnerable 
   }
   const ax = aim?.x ?? 1; const ay = aim?.y ?? 0;
   const hx = x + ax * 10; const hy = yy + ay * 7 - 1;
-  if (id === 'sable') {
+  if (id === 'vanguard') {
     line(ctx, '#75503c', x + ax * 5, yy + ay * 4, hx, hy + 3, 2);
     fill(ctx, '#edb264', hx - 3, hy - 3, 7, 6);
     fill(ctx, '#f2d48b', hx - 2, hy - 2, 4, 3);
@@ -224,11 +224,11 @@ export function drawHero(ctx, id, x, y, aim, time, moving = false, invulnerable 
   }
   if (attacking > 0) {
     ctx.save(); ctx.globalAlpha = Math.min(.7, attacking * 3);
-    ctx.strokeStyle = id === 'sable' ? '#d8e3a2' : '#ffcc72'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(x, yy, id === 'sable' ? 26 : 15, Math.atan2(ay, ax) - .95, Math.atan2(ay, ax) + .95); ctx.stroke(); ctx.restore();
+    ctx.strokeStyle = id === 'vanguard' ? '#d8e3a2' : '#ffcc72'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, yy, id === 'vanguard' ? 26 : 15, Math.atan2(ay, ax) - .95, Math.atan2(ay, ax) + .95); ctx.stroke(); ctx.restore();
   }
   if (skillFlash > 0) {
-    ctx.save(); ctx.globalAlpha = Math.min(.45, skillFlash * 1.3); ctx.strokeStyle = id === 'sable' ? '#d7e99c' : '#efbd67'; ctx.lineWidth = 2;
+    ctx.save(); ctx.globalAlpha = Math.min(.45, skillFlash * 1.3); ctx.strokeStyle = id === 'vanguard' ? '#d7e99c' : '#efbd67'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(x, yy, 20 + (1 - skillFlash) * 34, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
   }
 }
@@ -354,10 +354,10 @@ export function drawBuffIcon(ctx, buffId, x, y, size = 10) {
   fill(ctx, '#f4e0a2', x + size / 2 - 1, y + 2, 2, size - 4);
 }
 
-export function drawHeroPortrait(ctx, heroId, x, y, scale = 1) {
+export function drawClassPortrait(ctx, classId, x, y, scale = 1) {
   ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
   fill(ctx, '#1b2a29', -16, -16, 32, 32);
-  if (heroId === 'sable') {
+  if (classId === 'vanguard') {
     fill(ctx, '#647951', -10, -2, 20, 14); fill(ctx, '#263b38', -8, -12, 16, 12); fill(ctx, '#b9af77', -6, -8, 12, 7);
     fill(ctx, '#1b2d30', -4, -7, 2, 2); fill(ctx, '#1b2d30', 3, -7, 2, 2); fill(ctx, '#e98750', -2, 3, 4, 4);
     fill(ctx, '#eab66a', 7, 1, 8, 4); fill(ctx, '#6c503b', 10, 4, 2, 9);

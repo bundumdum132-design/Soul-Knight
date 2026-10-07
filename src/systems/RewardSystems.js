@@ -1,5 +1,5 @@
 import { ROOM, clamp, dist, norm } from '../constants.js';
-import { HEROES, WEAPONS, BUFFS } from '../content.js';
+import { CLASSES, WEAPONS, BUFFS } from '../content.js';
 import { makeRng, pick } from '../rng.js';
 import { persistSave } from '../save.js';
 import { rollReward } from '../encounters.js';
@@ -88,7 +88,7 @@ export class RewardSystems extends CombatSystems {
       this.run.xp -= this.run.xpNext;
       this.run.level++;
       this.run.xpNext = Math.floor(32 + this.run.level * 18 + this.run.level * this.run.level * 1.5);
-      this.run.player.hp = Math.min(this.run.player.maxHp, this.run.player.hp + 7);
+      this.run.player.hp = Math.min(this.run.player.maxHp, this.run.player.hp + 1);
       this.openBuffChoice();
       this.sound.play('level');
       break;
@@ -122,10 +122,10 @@ export class RewardSystems extends CombatSystems {
     if (entry.stacks >= data.maxStacks) return;
     entry.stacks++;
     if (id === 'ironbark') {
-      this.run.player.maxHp += 16;
-      this.run.player.hp = Math.min(this.run.player.maxHp, this.run.player.hp + 16);
+      this.run.player.maxHp += 1;
+      this.run.player.hp = Math.min(this.run.player.maxHp, this.run.player.hp + 1);
       this.run.player.maxArmor += 1;
-      this.run.player.armor += 1;
+      this.run.player.armor = Math.min(this.run.player.maxArmor, this.run.player.armor + 1);
     }
     this.save.discoveries.buffs ||= [];
     if (!this.save.discoveries.buffs.includes(id)) this.save.discoveries.buffs.push(id);
@@ -165,7 +165,7 @@ export class RewardSystems extends CombatSystems {
     this.currentRoom.encounterEnded = true;
     this.run.stats.roomsCleared++;
     const iron = this.buffStacks('ironbark');
-    if (iron) this.run.player.hp = Math.min(this.run.player.maxHp, this.run.player.hp + 8 * iron);
+    if (iron) this.run.player.hp = Math.min(this.run.player.maxHp, this.run.player.hp + iron);
     this.updateDoorMap();
     this.sound.play('clear');
     this.emitRing(240, 134, '#cfdb91', 18);
@@ -207,7 +207,8 @@ export class RewardSystems extends CombatSystems {
       if (this.run.floor >= 3) this.endRun('victory');
       else {
         this.run.floor++;
-        player.hp = Math.min(player.maxHp, player.hp + 22);
+        player.hp = Math.min(player.maxHp, player.hp + 1);
+        player.currentEnergy = clamp(player.currentEnergy + 20, 0, player.maxEnergy);
         player.armor = player.maxArmor;
         this.createFloor(this.run.floor);
         this.sound.setTrack('dungeon');
@@ -256,7 +257,7 @@ export class RewardSystems extends CombatSystems {
     if (item.type === 'buff' && this.buffStacks(item.buff) >= BUFFS[item.buff].maxStacks) return this.showToast('THAT KNOT CANNOT STACK FURTHER.');
     this.run.coins -= item.price;
     item.bought = true;
-    if (item.type === 'heal') this.run.player.hp = Math.min(this.run.player.maxHp, this.run.player.hp + 38);
+    if (item.type === 'heal') this.run.player.hp = Math.min(this.run.player.maxHp, this.run.player.hp + 3);
     else if (item.type === 'buff') this.grantBuff(item.buff);
     else if (item.type === 'weapon') this.equipWeapon(item.weapon, 240, 136, false);
     else if (item.type === 'coins') { this.run.coins += item.amount; this.run.stats.coinsCollected += item.amount; }
@@ -309,22 +310,22 @@ export class RewardSystems extends CombatSystems {
   damagePlayer(raw, source) {
     const p = this.run.player;
     if (p.invuln > 0 || this.deathTimer > 0) return 0;
-    let amount = Math.max(1, raw);
+    const baseDamage = Math.max(1, Math.round(raw));
+    let absorbed = 0;
     if (p.armor > 0) {
-      const absorbed = Math.min(p.armor, amount * .55);
-      p.armor -= absorbed;
-      amount -= absorbed;
+      absorbed = Math.min(p.armor, Math.ceil(baseDamage * .45));
+      p.armor = Math.max(0, p.armor - absorbed);
       p.armorTimer = 6;
     }
-    amount = Math.max(1, Math.round(amount));
+    const amount = Math.max(0, baseDamage - absorbed);
     p.hp = Math.max(0, p.hp - amount);
     p.invuln = .45;
     p.lastDamage = 0;
     this.run.stats.damageTaken += amount;
-    this.addDamageNumber(p.x, p.y - 12, `-${amount}`, '#e98779', false);
-    this.emitParticles(p.x, p.y, '#e58a73', 9, 45);
-    this.sound.play('hurt');
-    if (this.save.settings.shake) this.screenShake = Math.max(this.screenShake || 0, .12);
+    this.addDamageNumber(p.x, p.y - 12, amount ? `-${amount}` : 'BLOCK', amount ? '#e98779' : '#9ed39d', false);
+    this.emitParticles(p.x, p.y, amount ? '#e58a73' : '#9ed39d', 9, 45);
+    this.sound.play(amount ? 'hurt' : 'buy', amount ? 1 : .45);
+    if (this.save.settings.shake && amount) this.screenShake = Math.max(this.screenShake || 0, .12);
     if (p.hp <= 0) {
       this.deathTimer = .74;
       p.moving = false;
@@ -337,13 +338,13 @@ export class RewardSystems extends CombatSystems {
   getInteractionHint() {
     if (!this.run || !this.currentRoom) return '';
     const p = this.run.player;
-    if (this.currentRoom.portalReady && dist(p.x, p.y, 240, 134) < 40) return this.run.floor >= 3 ? '[ F ]  ENTER THE LAST LIGHT' : '[ F ]  DESCEND TO THE NEXT FLOOR';
+    if (this.currentRoom.portalReady && dist(p.x, p.y, 240, 134) < 40) return this.run.floor >= 3 ? '[ E ]  ENTER THE LAST LIGHT' : '[ E ]  DESCEND TO THE NEXT FLOOR';
     const chest = this.currentRoom.chest;
-    if (chest && !chest.open && dist(p.x, p.y, chest.x, chest.y) < 38) return '[ F ]  OPEN THE ' + chest.kind.toUpperCase() + ' CHEST';
+    if (chest && !chest.open && dist(p.x, p.y, chest.x, chest.y) < 38) return '[ E ]  OPEN THE ' + chest.kind.toUpperCase() + ' CHEST';
     const weapon = this.currentRoom.drops.find((d) => d.type === 'weapon' && !d.collected && dist(p.x, p.y, d.x, d.y) < 34);
-    if (weapon) return `[ F ]  EQUIP ${WEAPONS[weapon.weapon]?.name?.toUpperCase() || 'WEAPON'}  ·  SLOT ${this.run.activeSlot + 1}`;
-    if (this.currentNode.type === 'shop' && dist(p.x, p.y, 240, 134) < 70) return '[ F ]  BROWSE THE MOSSBACK COUNTER';
-    if (this.currentNode.type === 'shrine' && !this.currentRoom.eventResolved) return '[ F ]  LISTEN TO THE SHRINE';
+    if (weapon) return `[ E ]  EQUIP ${WEAPONS[weapon.weapon]?.name?.toUpperCase() || 'WEAPON'}  ·  SLOT ${this.run.activeSlot + 1}`;
+    if (this.currentNode.type === 'shop' && dist(p.x, p.y, 240, 134) < 70) return '[ E ]  BROWSE THE MOSSBACK COUNTER';
+    if (this.currentNode.type === 'shrine' && !this.currentRoom.eventResolved) return '[ E ]  LISTEN TO THE SHRINE';
     return '';
   }
 
@@ -358,13 +359,16 @@ export class RewardSystems extends CombatSystems {
     const elapsed = Math.floor(this.run.stats.elapsed);
     const prettyTime = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`;
     this.endedRun = {
-      outcome, heroId: this.run.heroId, floor: this.run.floor, seed: this.run.seed, coins: this.run.coins,
+      outcome, classId: this.run.classId, floor: this.run.floor, seed: this.run.seed, coins: this.run.coins,
       buffs: this.run.buffs.map((b) => ({ ...b })), stats: { ...this.run.stats, weaponsUsed: { ...this.run.stats.weaponsUsed } },
       rooms: this.run.stats.roomsCleared, kills: this.run.stats.enemiesDefeated, rewardMemory, time: prettyTime,
     };
     this.save.memory += rewardMemory;
-    if (outcome === 'victory') { this.save.stats.wins++; this.save.achievements = [...new Set([...this.save.achievements, 'first-victory'])]; }
-    else if (outcome === 'death') this.save.stats.deaths++;
+    if (outcome === 'victory') {
+      this.save.stats.wins++;
+      this.save.weaponTickets = Math.min(99, this.save.weaponTickets + 1);
+      this.save.achievements = [...new Set([...this.save.achievements, 'first-victory'])];
+    } else if (outcome === 'death') this.save.stats.deaths++;
     this.save.stats.rooms += this.run.stats.roomsCleared;
     this.save.stats.enemies += this.run.stats.enemiesDefeated;
     this.save.stats.bosses += this.run.stats.bossesDefeated;
@@ -372,7 +376,7 @@ export class RewardSystems extends CombatSystems {
     this.save.stats.bestFloor = Math.max(this.save.stats.bestFloor, this.run.floor);
     this.save.stats.playSeconds += elapsed;
     this.save.lastRun = { outcome, floor: this.run.floor, kills: this.run.stats.enemiesDefeated, rooms: this.run.stats.roomsCleared, time: prettyTime };
-    this.resultMessage = outcome === 'victory' ? 'The Gloamheart is quiet. The root-road is open.' : outcome === 'retreat' ? 'A deliberate retreat; the hall keeps what you found.' : 'Every expedition leaves something behind.';
+    this.resultMessage = outcome === 'victory' ? 'The Gloamheart is quiet. The root-road opens; one weapon ticket is earned.' : outcome === 'retreat' ? 'A deliberate retreat; the hall keeps what you found.' : 'Every expedition leaves something behind.';
     persistSave(this.save);
     this.screen = 'results'; this.overlay = 'none';
     this.sound.setTrack(outcome === 'victory' ? 'hub' : 'menu');

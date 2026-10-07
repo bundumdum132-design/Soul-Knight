@@ -1,3 +1,7 @@
+const normalizeKey = (key) => key === ' ' ? 'space' : key.toLowerCase();
+
+import { RENDER_SCALE } from './constants.js';
+
 export class Input {
   constructor(canvas) {
     this.canvas = canvas;
@@ -6,13 +10,13 @@ export class Input {
     this.released = new Set();
     this.pointer = { x: 0, y: 0, down: false, pressed: false, moved: false, active: false };
     this.boundKeyDown = (e) => {
-      const key = e.key.toLowerCase();
-      if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) e.preventDefault();
+      const key = normalizeKey(e.key);
+      if (['space', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) e.preventDefault();
       if (!this.down.has(key)) this.pressed.add(key);
       this.down.add(key);
     };
     this.boundKeyUp = (e) => {
-      const key = e.key.toLowerCase();
+      const key = normalizeKey(e.key);
       if (this.down.delete(key)) this.released.add(key);
     };
     this.boundPointerMove = (e) => this.setPointer(e);
@@ -39,8 +43,8 @@ export class Input {
   setPointer(e) {
     const rect = this.canvas.getBoundingClientRect();
     const oldX = this.pointer.x; const oldY = this.pointer.y;
-    this.pointer.x = (e.clientX - rect.left) * this.canvas.width / rect.width;
-    this.pointer.y = (e.clientY - rect.top) * this.canvas.height / rect.height;
+    this.pointer.x = (e.clientX - rect.left) * this.canvas.width / rect.width / RENDER_SCALE;
+    this.pointer.y = (e.clientY - rect.top) * this.canvas.height / rect.height / RENDER_SCALE;
     this.pointer.moved = Math.abs(oldX - this.pointer.x) + Math.abs(oldY - this.pointer.y) > 0.4;
     this.pointer.active = true;
   }

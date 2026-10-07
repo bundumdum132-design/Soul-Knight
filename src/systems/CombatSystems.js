@@ -1,5 +1,5 @@
 import { ROOM, clamp, dist, norm } from '../constants.js';
-import { HEROES, WEAPONS } from '../content.js';
+import { CLASSES, WEAPONS } from '../content.js';
 import { directionBetween } from '../dungeon.js';
 import { makeEnemy } from '../encounters.js';
 import { persistSave } from '../save.js';
@@ -26,18 +26,22 @@ export class CombatSystems extends RunWorld {
     player.dodgeTime = Math.max(0, player.dodgeTime - dt);
     player.invuln = Math.max(0, player.invuln - dt);
     player.armorTimer = Math.max(0, player.armorTimer - dt);
+    player.currentEnergy = clamp(player.currentEnergy + player.energyRegen * dt, 0, player.maxEnergy);
+    player.energyWarning = Math.max(0, player.energyWarning - dt);
     player.lastDamage += dt;
     if (player.armorTimer <= 0 && player.armor < player.maxArmor && player.lastDamage > 4) {
       player.armor = Math.min(player.maxArmor, player.armor + dt * .25);
     }
     if (player.flowReady) player.flow = Math.max(.9, player.flow);
 
-    if (this.input.wasPressed('q')) this.run.activeSlot = 1 - this.run.activeSlot;
     if (this.input.wasPressed('1')) this.run.activeSlot = 0;
     if (this.input.wasPressed('2')) this.run.activeSlot = 1;
-    if (this.input.wasPressed('e')) this.activateSkill();
+    if (this.input.wasPressed('q')) this.activateSkill();
     if (this.input.wasPressed('shift')) this.startDodge();
-    if (this.input.wasPressed('f')) this.interact();
+    if (this.input.wasPressed('e')) {
+      this.interact();
+      if (this.overlay !== 'none') return;
+    }
 
     const dx = (this.input.isDown('d') || this.input.isDown('arrowright') ? 1 : 0) - (this.input.isDown('a') || this.input.isDown('arrowleft') ? 1 : 0);
     const dy = (this.input.isDown('s') || this.input.isDown('arrowdown') ? 1 : 0) - (this.input.isDown('w') || this.input.isDown('arrowup') ? 1 : 0);
@@ -46,16 +50,19 @@ export class CombatSystems extends RunWorld {
     if (moving) {
       const direction = norm(dx, dy);
       player.flow = Math.min(1.15, player.flow + dt);
-      if (this.run.heroId === 'luma' && player.flow >= .95) player.flowReady = true;
+      if (this.run.classId === 'ranger' && player.flow >= .95) player.flowReady = true;
       const speed = player.speed * (1 + this.buffStacks('quickbloom') * .08) * (player.dodgeTime > 0 ? 3.0 : 1);
       if (this.movePlayer(direction.x * speed * dt, direction.y * speed * dt)) return;
-    } else if (this.run.heroId === 'luma' && !player.flowReady) player.flow = Math.max(0, player.flow - dt * .72);
+    } else if (this.run.classId === 'ranger' && !player.flowReady) player.flow = Math.max(0, player.flow - dt * .72);
 
-    const aimKeysX = (this.input.isDown('arrowright') ? 1 : 0) - (this.input.isDown('arrowleft') ? 1 : 0);
-    const aimKeysY = (this.input.isDown('arrowdown') ? 1 : 0) - (this.input.isDown('arrowup') ? 1 : 0);
-    if (Math.hypot(aimKeysX, aimKeysY) > 0) player.aim = norm(aimKeysX, aimKeysY);
-    else if (this.input.pointer.active) player.aim = norm(this.input.pointer.x - player.x, this.input.pointer.y - player.y);
-    if (this.input.pointer.down || this.input.isDown('z')) this.tryAttack();
+    const pointer = this.input.pointer;
+    const pointerOnHud = (pointer.x >= 6 && pointer.x <= 196 && pointer.y >= 6 && pointer.y <= 62)
+      || (pointer.x >= 205 && pointer.x <= 403 && pointer.y >= 7 && pointer.y <= 55)
+      || (pointer.x >= 414 && pointer.x <= 475 && pointer.y >= 7 && pointer.y <= 61)
+      || (pointer.x >= 6 && pointer.x <= 132 && pointer.y >= 226 && pointer.y <= 264)
+      || (pointer.x >= 137 && pointer.x <= 344 && pointer.y >= 228 && pointer.y <= 247);
+    if (pointer.active && !pointerOnHud) player.aim = norm(pointer.x - player.x, pointer.y - player.y);
+    if ((pointer.down && !pointerOnHud) || this.input.isDown('space')) this.tryAttack();
 
     this.updateEnemies(dt);
     this.updateProjectiles(dt);
@@ -117,22 +124,30 @@ export class CombatSystems extends RunWorld {
     const d = Math.hypot(x, y) > 0 ? norm(x, y) : p.aim;
     p.dodgeCd = .76; p.dodgeTime = .19; p.invuln = .38;
     this.sound.play('skill', .55);
-    this.emitParticles(p.x - d.x * 7, p.y - d.y * 7, this.run.heroId === 'sable' ? '#a9bf82' : '#77d3c0', 8, 42);
+    this.emitParticles(p.x - d.x * 7, p.y - d.y * 7, this.run.classId === 'vanguard' ? '#a9bf82' : '#77d3c0', 8, 42);
   }
 
   activateSkill() {
     const player = this.run?.player;
-    if (!player || player.skillCd > 0 || this.overlay !== 'none') return;
-    const hero = HEROES[this.run.heroId];
-    player.skillCd = hero.skillCooldown;
+    if (!player || player.skillCd > 0 || this.overlay !== 'none') return false;
+    const classInfo = CLASSES[this.run.classId];
+    if (player.currentEnergy < player.skillCost) {
+      player.energyWarning = .8;
+      this.showToast(`NOT ENOUGH ENERGY  ·  ${Math.ceil(player.skillCost - player.currentEnergy)} NEEDED`, 1.4);
+      this.sound.play('hurt', .35);
+      return false;
+    }
+    player.currentEnergy = clamp(player.currentEnergy - player.skillCost, 0, player.maxEnergy);
+    player.skillCd = classInfo.skillCooldown;
     player.skillAnim = .8;
+    player.energyWarning = 0;
     this.sound.play('skill', 1.1);
-    if (hero.id === 'sable') {
+    if (classInfo.id === 'vanguard') {
       this.emitRing(player.x, player.y, '#bbd58e', 14);
       for (const enemy of this.currentRoom.enemies) {
         if (!enemy.alive) continue;
         if (dist(player.x, player.y, enemy.x, enemy.y) <= 78) {
-          this.damageEnemy(enemy, 34 * player.attackMult, { element: 'Physical', knockback: 105, stagger: .48, skill: true });
+          this.damageEnemy(enemy, 4 * player.attackMult * player.skillPower, { element: 'Physical', knockback: 105, stagger: .48, skill: true });
         }
       }
       player.armor = Math.min(player.maxArmor, player.armor + 1);
@@ -153,11 +168,12 @@ export class CombatSystems extends RunWorld {
         if (!enemy.alive) continue;
         const a = dist(ox, oy, enemy.x, enemy.y); const b = dist(player.x, player.y, enemy.x, enemy.y);
         if (Math.min(a, b) < 27 || this.distanceToSegment(enemy.x, enemy.y, ox, oy, player.x, player.y) < 13) {
-          this.damageEnemy(enemy, 21 * player.attackMult, { element: 'Fire', knockback: 80, skill: true });
+          this.damageEnemy(enemy, 3.5 * player.attackMult * player.skillPower, { element: 'Fire', knockback: 80, skill: true });
         }
       }
       this.showToast('LANTERN SKIP  ·  leave a burning afterimage');
     }
+    return true;
   }
 
   distanceToSegment(px, py, x1, y1, x2, y2) {
@@ -177,7 +193,7 @@ export class CombatSystems extends RunWorld {
     this.run.stats.weaponsUsed[weapon.id] = (this.run.stats.weaponsUsed[weapon.id] || 0) + 1;
     if (weapon.kind === 'melee') {
       this.sound.play('swing');
-      const burst = this.run.heroId === 'sable' && p.barkBurst;
+      const burst = this.run.classId === 'vanguard' && p.barkBurst;
       let meleeHits = 0;
       for (const enemy of this.currentRoom.enemies) {
         if (!enemy.alive) continue;
@@ -189,8 +205,8 @@ export class CombatSystems extends RunWorld {
           meleeHits++;
         }
       }
-      if (this.run.heroId === 'sable' && meleeHits > 0) {
-        if (p.barkBurst) { p.barkBurst = false; p.armor = Math.min(p.maxArmor, p.armor + 1); p.hp = Math.min(p.maxHp, p.hp + 4); this.emitRing(p.x, p.y, '#a6c27a', 10); }
+      if (this.run.classId === 'vanguard' && meleeHits > 0) {
+        if (p.barkBurst) { p.barkBurst = false; p.armor = Math.min(p.maxArmor, p.armor + 1); p.hp = Math.min(p.maxHp, p.hp + 1); this.emitRing(p.x, p.y, '#a6c27a', 10); }
         else {
           p.passiveCount += meleeHits;
           if (p.passiveCount >= 3) { p.passiveCount %= 3; p.barkBurst = true; this.showToast('KNOT OF THREE  ·  next maul bursts'); }
@@ -219,7 +235,7 @@ export class CombatSystems extends RunWorld {
 
   consumeFlowBonus() {
     const p = this.run.player;
-    if (this.run.heroId === 'luma' && p.flowReady) {
+    if (this.run.classId === 'ranger' && p.flowReady) {
       p.flowReady = false; p.flow = 0;
       return true;
     }
@@ -255,7 +271,7 @@ export class CombatSystems extends RunWorld {
     if (!options.status && (options.element === 'Fire' || this.buffStacks('cinderblood') > 0)) {
       const stacks = this.buffStacks('cinderblood');
       enemy.burn = Math.max(enemy.burn, 1.5 + stacks * .45);
-      enemy.burnDps = Math.max(enemy.burnDps || 0, Math.max(2, damage * (.16 + stacks * .07)));
+      enemy.burnDps = Math.max(enemy.burnDps || 0, Math.max(1, damage * (.16 + stacks * .07)));
     }
     if (this.buffStacks('stormpollen') > 0 && !options.noChain) {
       const nearby = this.currentRoom.enemies.find((other) => other.alive && other.id !== enemy.id && dist(enemy.x, enemy.y, other.x, other.y) < 68 + this.buffStacks('stormpollen') * 8);
@@ -325,7 +341,7 @@ export class CombatSystems extends RunWorld {
       if (enemy.chargeTime > 0) {
         enemy.chargeTime -= dt;
         this.moveEnemy(enemy, enemy.vx * dt, enemy.vy * dt);
-        if (dist(enemy.x, enemy.y, p.x, p.y) < enemy.radius + 9) this.damagePlayer(enemy.touch + 4, enemy);
+        if (dist(enemy.x, enemy.y, p.x, p.y) < enemy.radius + 9) this.damagePlayer(enemy.touch + 1, enemy);
         continue;
       }
       const d = dist(enemy.x, enemy.y, p.x, p.y);
@@ -370,7 +386,7 @@ export class CombatSystems extends RunWorld {
   resolveEnemyTelegraph(enemy) {
     if (!enemy.alive) return;
     if (enemy.attackMode === 'shoot') {
-      this.enemyShot(enemy, enemy.targetX, enemy.targetY, enemy.role === 'support' ? 92 : 122, enemy.role === 'support' ? 7 : 9);
+      this.enemyShot(enemy, enemy.targetX, enemy.targetY, enemy.role === 'support' ? 92 : 122, 1);
     } else if (enemy.attackMode === 'charge') {
       const d = norm(enemy.targetX - enemy.x, enemy.targetY - enemy.y);
       enemy.vx = d.x * 270; enemy.vy = d.y * 270; enemy.chargeTime = .48;
@@ -378,7 +394,7 @@ export class CombatSystems extends RunWorld {
     } else if (enemy.attackMode === 'heal') {
       const ally = this.currentRoom.enemies.find((e) => e.id === enemy.targetId && e.alive);
       if (ally) {
-        const amount = Math.min(13, ally.maxHp - ally.hp); ally.hp += amount; ally.flash = .14;
+        const amount = Math.min(2, ally.maxHp - ally.hp); ally.hp += amount; ally.flash = .14;
         this.addDamageNumber(ally.x, ally.y - 10, `+${Math.round(amount)}`, '#a7da91', false);
         this.emitParticles(ally.x, ally.y, '#a9d892', 7, 28);
       }
@@ -432,31 +448,31 @@ export class CombatSystems extends RunWorld {
     const phase = enemy.bossPhase;
     if (enemy.attackMode === 'slam') {
       this.emitRing(enemy.targetX, enemy.targetY, '#e88b64', 19);
-      if (dist(this.run.player.x, this.run.player.y, enemy.targetX, enemy.targetY) < 32) this.damagePlayer(20 + phase * 3, enemy);
+      if (dist(this.run.player.x, this.run.player.y, enemy.targetX, enemy.targetY) < 32) this.damagePlayer(2, enemy);
       const count = phase === 1 ? 5 : phase === 2 ? 8 : 12;
       for (let i = 0; i < count; i++) {
         const a = i * Math.PI * 2 / count + this.time * .12;
-        this.enemyShot(enemy, enemy.x + Math.cos(a) * 38, enemy.y + Math.sin(a) * 38, 93 + phase * 8, 8 + phase);
+        this.enemyShot(enemy, enemy.x + Math.cos(a) * 38, enemy.y + Math.sin(a) * 38, 93 + phase * 8, 1);
       }
     } else if (enemy.attackMode === 'bloom') {
       const count = phase === 3 ? 14 : phase === 2 ? 10 : 7;
       for (let i = 0; i < count; i++) {
         const a = i * Math.PI * 2 / count + this.time * .28;
-        this.enemyShot(enemy, enemy.x + Math.cos(a) * 18, enemy.y + Math.sin(a) * 18, 83 + phase * 6, 8 + phase);
+        this.enemyShot(enemy, enemy.x + Math.cos(a) * 18, enemy.y + Math.sin(a) * 18, 83 + phase * 6, 1);
       }
     } else if (enemy.attackMode === 'fan') {
       const base = Math.atan2(enemy.targetY - enemy.y, enemy.targetX - enemy.x);
       const n = phase === 3 ? 5 : 3;
       for (let i = 0; i < n; i++) {
         const angle = base + (i - (n - 1) / 2) * .2;
-        this.currentRoom.projectiles.push({ id: `ep-${this.nextEntityId++}`, friendly: false, x: enemy.x, y: enemy.y, vx: Math.cos(angle) * 125, vy: Math.sin(angle) * 125, damage: 10 + phase * 3, life: 2.3, radius: 3, element: 'Poison' });
+        this.currentRoom.projectiles.push({ id: `ep-${this.nextEntityId++}`, friendly: false, x: enemy.x, y: enemy.y, vx: Math.cos(angle) * 125, vy: Math.sin(angle) * 125, damage: 1, life: 2.3, radius: 3, element: 'Poison' });
       }
     }
     enemy.attackMode = '';
     this.sound.play('boss', .6);
   }
 
-  enemyShot(enemy, targetX, targetY, speed = 112, damage = 8) {
+  enemyShot(enemy, targetX, targetY, speed = 112, damage = 1) {
     const d = norm(targetX - enemy.x, targetY - enemy.y);
     this.currentRoom.projectiles.push({ id: `ep-${this.nextEntityId++}`, friendly: false, x: enemy.x, y: enemy.y, vx: d.x * speed, vy: d.y * speed, damage, life: 2.8, radius: 3, element: 'Poison' });
   }

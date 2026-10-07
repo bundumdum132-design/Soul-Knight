@@ -1,28 +1,22 @@
 import { C, WIDTH } from './constants.js';
-import { HEROES, WEAPONS, BUFFS, SHOP_STOCK, rarityColor } from './content.js';
-import { drawBar, drawBuffIcon, drawHeroPortrait, drawWeaponGlyph, panel, text } from './art.js';
+import { CLASSES, WEAPONS, BUFFS, SHOP_STOCK, rarityColor } from './content.js';
+import { drawBar, drawBuffIcon, drawClassPortrait, drawWeaponGlyph, panel, text } from './art.js';
 
 export const MENU_BUTTONS = [
   { id: 'start', label: 'BEGIN EXPEDITION', x: 42, y: 103, w: 190, h: 21, hotkey: 'ENTER' },
-  { id: 'hub', label: 'LANTERN HALL', x: 42, y: 128, w: 190, h: 21 },
+  { id: 'hub', label: 'CLASS HALL', x: 42, y: 128, w: 190, h: 21 },
   { id: 'help', label: 'FIELD GUIDE', x: 42, y: 153, w: 190, h: 21 },
   { id: 'collection', label: 'ARCHIVE', x: 42, y: 178, w: 190, h: 21 },
   { id: 'settings', label: 'SETTINGS', x: 42, y: 203, w: 190, h: 21 },
   { id: 'exit', label: 'CLOSE GAME', x: 42, y: 228, w: 190, h: 21 },
 ];
 export const SELECT_CARDS = [
-  { id: 'sable', x: 37, y: 74, w: 196, h: 126 },
-  { id: 'luma', x: 247, y: 74, w: 196, h: 126 },
+  { id: 'vanguard', x: 37, y: 74, w: 196, h: 126 },
+  { id: 'ranger', x: 247, y: 74, w: 196, h: 126 },
 ];
 export const SELECT_BUTTONS = [
   { id: 'back', label: 'BACK', x: 38, y: 220, w: 88, h: 24 },
   { id: 'begin', label: 'ENTER THE GLOAM', x: 255, y: 220, w: 188, h: 24 },
-];
-export const HUB_BUTTONS = [
-  { id: 'start', label: 'START AN EXPEDITION', x: 286, y: 100, w: 158, h: 24 },
-  { id: 'upgrade', label: 'FORGE +1 HEART', x: 286, y: 129, w: 158, h: 23 },
-  { id: 'collection', label: 'OPEN ARCHIVE', x: 286, y: 157, w: 158, h: 23 },
-  { id: 'menu', label: 'MAIN MENU', x: 286, y: 185, w: 158, h: 23 },
 ];
 export const PAUSE_BUTTONS = [
   { id: 'resume', label: 'RESUME', x: 158, y: 83, w: 164, h: 21 },
@@ -79,8 +73,8 @@ export function drawMenu(ctx, game) {
 
   // Original low-resolution character vignette, animated in the distant ruins.
   const sway = Math.sin(game.time * .8) * 2;
-  drawHeroPortrait(ctx, 'sable', 342 + sway, 168, 2.55);
-  drawHeroPortrait(ctx, 'luma', 397 - sway, 178, 1.55);
+  drawClassPortrait(ctx, 'vanguard', 342 + sway, 168, 2.55);
+  drawClassPortrait(ctx, 'ranger', 397 - sway, 178, 1.55);
   ctx.globalAlpha = .5 + Math.sin(game.time * 1.5) * .08;
   ctx.fillStyle = '#e9bd68'; ctx.fillRect(357, 112, 4, 4); ctx.fillRect(374, 103, 2, 2); ctx.fillRect(418, 117, 3, 3);
   ctx.globalAlpha = 1;
@@ -90,106 +84,74 @@ export function drawMenu(ctx, game) {
   if (game.toast) text(ctx, game.toast, 240, 257, 7, '#f1d58d', 'center', 600);
 }
 
-export function drawCharacterSelect(ctx, game) {
-  drawHeader(ctx, 'CHOOSE YOUR WAYFARER', 'Two paths into the same dark.');
+export function drawClassSelect(ctx, game) {
+  drawHeader(ctx, 'CHOOSE YOUR CLASS', 'Distinct passives, skills, stats and starting weapons.');
   for (const card of SELECT_CARDS) {
-    const hero = HEROES[card.id];
+    const classInfo = CLASSES[card.id];
     const hover = inside(game.input.pointer.x, game.input.pointer.y, card);
-    const selected = game.selectedHero === card.id;
+    const selected = game.selectedClass === card.id;
     panel(ctx, card.x, card.y, card.w, card.h, { fill: selected ? '#263c37' : '#1b2c2c', border: selected || hover ? '#d4b86f' : '#516452' });
-    drawHeroPortrait(ctx, hero.id, card.x + 31, card.y + 42, 1.2);
-    text(ctx, hero.name.toUpperCase(), card.x + 57, card.y + 12, 13, '#f0dfb6', 'left', 800);
-    text(ctx, hero.title, card.x + 57, card.y + 29, 7, hero.accent, 'left', 600);
-    text(ctx, hero.callout, card.x + 12, card.y + 64, 6, '#a8b39e', 'left', 500);
-    text(ctx, `HP ${hero.maxHp}   SPEED ${hero.speed}`, card.x + 12, card.y + 78, 6, '#d4d6b3', 'left', 500);
-    text(ctx, `PASSIVE  ${hero.passiveName}`, card.x + 12, card.y + 91, 6, '#e3c77f', 'left', 600);
-    text(ctx, hero.passive, card.x + 12, card.y + 101, 6, '#9aa995', 'left', 500);
-    text(ctx, `SKILL  ${hero.skillName}`, card.x + 12, card.y + 114, 6, '#87d2bd', 'left', 600);
+    drawClassPortrait(ctx, classInfo.id, card.x + 31, card.y + 42, 1.2);
+    text(ctx, classInfo.name.toUpperCase(), card.x + 57, card.y + 12, 13, '#f0dfb6', 'left', 800);
+    text(ctx, classInfo.title, card.x + 57, card.y + 29, 7, classInfo.accent, 'left', 600);
+    text(ctx, classInfo.callout, card.x + 12, card.y + 64, 6, '#a8b39e', 'left', 500);
+    text(ctx, `HP ${classInfo.maxHp}  EN ${classInfo.maxEnergy}  ARM ${classInfo.armor}`, card.x + 12, card.y + 78, 6, '#d4d6b3', 'left', 500);
+    text(ctx, `PASSIVE  ${classInfo.passiveName}`, card.x + 12, card.y + 91, 6, '#e3c77f', 'left', 600);
+    text(ctx, classInfo.passive, card.x + 12, card.y + 101, 6, '#9aa995', 'left', 500);
+    text(ctx, `SKILL  ${classInfo.skillName}`, card.x + 12, card.y + 114, 6, '#87d2bd', 'left', 600);
   }
   drawButton(ctx, game.input, SELECT_BUTTONS[0]);
   drawButton(ctx, game.input, SELECT_BUTTONS[1], { active: true });
-  text(ctx, 'A / D OR ← / → TO SELECT   •   ENTER TO BEGIN', 240, 252, 6, '#899783', 'center', 500);
-}
-
-export function drawHub(ctx, game) {
-  drawHeader(ctx, 'THE LANTERN HALL', 'A quiet place between dangerous places.');
-  panel(ctx, 31, 67, 235, 172, { fill: '#1a2a29', border: '#50624d' });
-  // central living forge
-  ctx.fillStyle = '#263c35'; ctx.fillRect(67, 93, 160, 107);
-  ctx.fillStyle = '#405940'; ctx.fillRect(80, 182, 135, 9);
-  ctx.fillStyle = '#667a50'; ctx.fillRect(99, 156, 14, 33); ctx.fillRect(179, 156, 14, 33);
-  ctx.fillStyle = '#826447'; ctx.fillRect(112, 151, 68, 37); ctx.fillStyle = '#b27e4f'; ctx.fillRect(119, 142, 54, 10);
-  ctx.fillStyle = '#e87f52'; ctx.fillRect(136, 154, 23, 20); ctx.fillStyle = '#f3c571'; ctx.fillRect(142, 151, 11, 13);
-  ctx.globalAlpha = .18 + Math.sin(game.time * 4) * .04; ctx.fillStyle = '#f1b968'; ctx.fillRect(126, 130, 44, 40); ctx.globalAlpha = 1;
-  drawHeroPortrait(ctx, game.lastHero || 'sable', 147, 120, 1.2);
-  text(ctx, 'THE LAST LANTERN', 148, 205, 7, '#e8d4a6', 'center', 700);
-  text(ctx, 'A root remembers every footstep.', 148, 218, 6, '#92a28d', 'center', 500);
-
-  panel(ctx, 278, 67, 174, 172, { fill: '#192827', border: '#50624d' });
-  text(ctx, 'WAYFARER LEDGER', 291, 79, 7, '#9eaf94', 'left', 600);
-  text(ctx, `${game.save.memory} MEMORY SHARDS`, 291, 91, 11, '#f0cf7d', 'left', 800);
-  text(ctx, `Runs ${game.save.stats.runs}  •  Best floor ${game.save.stats.bestFloor}`, 291, 109, 6, '#9aa995', 'left', 500);
-  text(ctx, `Permanent heart knots: ${game.save.permanentHp}/5`, 291, 121, 6, '#9aa995', 'left', 500);
-  for (const item of HUB_BUTTONS) {
-    const sub = item.id === 'upgrade' ? (game.save.permanentHp >= 5 ? 'MAX' : '12 SHARDS') : '';
-    drawButton(ctx, game.input, item, { sub, active: item.id === 'start' });
-  }
-  text(ctx, 'LAST RUN', 36, 76, 6, '#8ba08c', 'left', 500);
-  const last = game.save.lastRun;
-  if (last) {
-    text(ctx, `${last.outcome?.toUpperCase() || 'ENDED'}  •  FLOOR ${last.floor || 1}`, 37, 88, 7, '#e6d6a9', 'left', 600);
-    text(ctx, `${last.kills || 0} foes  •  ${last.rooms || 0} rooms  •  ${last.time || '—'}`, 37, 100, 6, '#9aa995', 'left', 500);
-  } else text(ctx, 'No expedition recorded yet.', 37, 91, 7, '#a4ad98', 'left', 500);
+  text(ctx, 'A / D SELECT  ·  ENTER CONFIRM  ·  ESC BACK', 240, 252, 6, '#899783', 'center', 500);
 }
 
 export function drawRunHud(ctx, game) {
   const run = game.run;
-  const hero = HEROES[run.heroId];
-  panel(ctx, 29, 24, 151, 35, { fill: 'rgba(17,29,31,.91)', border: '#52644f' });
-  drawHeroPortrait(ctx, hero.id, 48, 42, .48);
-  text(ctx, hero.name.toUpperCase(), 62, 28, 7, '#eee0b6', 'left', 700);
-  text(ctx, `${Math.ceil(run.player.hp)} / ${run.player.maxHp} HP`, 62, 39, 6, '#b1c0a5', 'left', 500);
-  drawBar(ctx, 62, 49, 106, 4, run.player.hp, run.player.maxHp, '#d97565');
-  if (run.player.armor > 0) text(ctx, `◇ ${run.player.armor}`, 170, 28, 6, '#8bd1c0', 'right', 600);
-  text(ctx, `FLOOR ${run.floor}  /  ${run.currentNode?.type?.toUpperCase() || 'ROOM'}`, 240, 29, 6, '#c0c5a6', 'center', 600);
-  drawMinimap(ctx, game, 375, 24, 72, 62);
+  if (!run?.player) return;
+  const player = run.player;
+  const classInfo = CLASSES[run.classId];
 
-  // bottom equipment and progress strip
-  panel(ctx, 29, 222, 422, 27, { fill: 'rgba(17,29,31,.94)', border: '#52644f' });
-  for (let i = 0; i < 2; i++) {
-    const x = 36 + i * 28;
-    drawWeaponGlyph(ctx, run.weapons[i], x, 227, 16);
-    if (run.activeSlot === i) { ctx.strokeStyle = '#f0ce78'; ctx.strokeRect(x - 1, 226, 18, 18); }
-    text(ctx, `${i + 1}`, x + 8, 244, 5, '#9ba68e', 'center', 500);
+  // Compact resource card keeps the arena center and lower combat lane clear.
+  panel(ctx, 6, 6, 190, 56, { fill: 'rgba(17,29,31,.94)', border: '#52644f' });
+  drawClassPortrait(ctx, classInfo.id, 19, 31, .48);
+  text(ctx, classInfo.name.toUpperCase(), 32, 10, 7, '#eee0b6', 'left', 700);
+  text(ctx, `HEALTH ${Math.ceil(player.hp)} / ${player.maxHp}`, 32, 21, 6, '#d8c7ae', 'left', 600);
+  text(ctx, `ARMOR ${Math.ceil(player.armor)} / ${player.maxArmor}`, 188, 21, 6, '#8bd1c0', 'right', 600);
+  drawBar(ctx, 32, 28, 151, 4, player.hp, player.maxHp, '#d97565');
+  text(ctx, `ENERGY ${Math.floor(player.currentEnergy)} / ${player.maxEnergy}`, 32, 38, 6, player.energyWarning > 0 ? '#ef9479' : '#a9d8c1', 'left', 600);
+  drawBar(ctx, 32, 46, 151, 4, player.currentEnergy, player.maxEnergy, player.energyWarning > 0 ? '#e98472' : '#77cdb6', '#263632');
+  if (player.energyWarning > 0 && Math.floor(game.time * 12) % 2 === 0) {
+    ctx.strokeStyle = '#ed9276'; ctx.strokeRect(6.5, 6.5, 189, 55);
   }
-  text(ctx, 'Q SWAP', 93, 230, 5, '#909f8d', 'left', 500);
-  panel(ctx, 130, 226, 23, 19, { fill: '#263a35', border: '#6a7958' });
-  text(ctx, hero.skillName.split(' ')[0].toUpperCase(), 141, 229, 5, '#a5d9c1', 'center', 600);
-  drawBar(ctx, 132, 239, 19, 3, Math.max(0, hero.skillCooldown - run.player.skillCd), hero.skillCooldown, '#7dd4bd', '#283632');
-  text(ctx, 'E', 141, 244, 5, '#b1c7ae', 'center', 500);
-  const weapon = WEAPONS[run.weapons[run.activeSlot]];
-  drawWeaponGlyph(ctx, weapon.id, 161, 227, 16);
-  text(ctx, weapon.name.toUpperCase(), 181, 228, 6, '#ece1bb', 'left', 600);
-  text(ctx, `${weapon.category} · ${weapon.element} · ${weapon.rarity}`, 181, 238, 5, rarityColor(weapon.rarity), 'left', 500);
-  drawBar(ctx, 305, 229, 82, 4, run.xp, run.xpNext, '#93c9a0', '#34443b');
-  text(ctx, `LV ${run.level}`, 305, 237, 5, '#d9dfb6', 'left', 500);
-  text(ctx, `✦ ${run.coins}`, 440, 230, 7, '#efc56d', 'right', 700);
-  // active buffs
-  run.buffs.slice(0, 5).forEach((buff, i) => {
-    drawBuffIcon(ctx, buff.id, 392 + i * 10, 229, 9);
-    if (buff.stacks > 1) text(ctx, buff.stacks, 400 + i * 10, 238, 5, '#fff0c7', 'center', 600);
-  });
-  text(ctx, 'WASD MOVE  ·  MOUSE / Z ATTACK  ·  SHIFT DODGE  ·  E SKILL  ·  F INTERACT  ·  TAB BUILD', 240, 258, 5, 'rgba(220,224,193,.67)', 'center', 500);
+  panel(ctx, 143, 8, 43, 18, { fill: '#263a35', border: '#6a7958' });
+  text(ctx, 'Q', 149, 12, 6, '#f1d082', 'left', 800);
+  text(ctx, 'SKILL', 160, 12, 5, '#b1c7ae', 'left', 600);
+  drawBar(ctx, 148, 21, 32, 2, Math.max(0, classInfo.skillCooldown - player.skillCd), classInfo.skillCooldown, '#7dd4bd', '#283632');
 
+  panel(ctx, 205, 7, 198, 48, { fill: 'rgba(17,29,31,.92)', border: '#52644f' });
+  text(ctx, `FLOOR ${run.floor}  ·  ${game.currentNode?.type?.toUpperCase() || 'ROOM'}`, 214, 12, 6, '#c0c5a6', 'left', 600);
+  text(ctx, WEAPONS[run.weapons[run.activeSlot]]?.name?.toUpperCase() || 'NO WEAPON', 214, 24, 6, '#eee1bb', 'left', 700);
+  text(ctx, `LV ${run.level}`, 214, 39, 5, '#d9dfb6', 'left', 600);
+  drawBar(ctx, 237, 41, 119, 4, run.xp, run.xpNext, '#93c9a0', '#34443b');
+  text(ctx, `✦ ${run.coins}`, 392, 39, 6, '#efc56d', 'right', 700);
+  drawMinimap(ctx, game, 414, 7, 61, 54);
+
+  panel(ctx, 6, 226, 126, 38, { fill: 'rgba(17,29,31,.94)', border: '#52644f' });
+  for (let i = 0; i < 2; i++) {
+    const x = 14 + i * 58;
+    drawWeaponGlyph(ctx, run.weapons[i], x, 234, 18);
+    if (run.activeSlot === i) { ctx.strokeStyle = '#f0ce78'; ctx.strokeRect(x - 1, 233, 20, 20); }
+    text(ctx, `${i + 1}`, x + 9, 254, 5, run.activeSlot === i ? '#f0ce78' : '#a5ae98', 'center', 700);
+  }
   const hint = game.getInteractionHint();
   if (hint) {
-    panel(ctx, 158, 201, 164, 17, { fill: 'rgba(16,26,27,.92)', border: '#8f9d68' });
-    text(ctx, hint, 240, 205, 7, '#f2d98f', 'center', 700);
+    panel(ctx, 137, 228, 207, 19, { fill: 'rgba(16,26,27,.94)', border: '#8f9d68' });
+    text(ctx, hint, 240, 234, 6, '#f2d98f', 'center', 700);
   }
   if (game.boss && game.boss.alive) {
-    panel(ctx, 155, 4, 170, 16, { fill: 'rgba(19,28,28,.95)', border: '#865a50' });
-    text(ctx, game.boss.name.toUpperCase(), 240, 7, 6, '#f2c184', 'center', 700);
-    drawBar(ctx, 164, 16, 152, 2, game.boss.hp, game.boss.maxHp, '#dd785f', '#513d38');
+    panel(ctx, 164, 63, 152, 16, { fill: 'rgba(19,28,28,.95)', border: '#865a50' });
+    text(ctx, game.boss.name.toUpperCase(), 240, 66, 6, '#f2c184', 'center', 700);
+    drawBar(ctx, 172, 75, 136, 2, game.boss.hp, game.boss.maxHp, '#dd785f', '#513d38');
   }
 }
 
@@ -268,7 +230,7 @@ export function drawShop(ctx, game) {
     text(ctx, item.bought ? 'SOLD' : `${item.price} AMBER`, r.x + r.w / 2, r.y + 82, 7, item.bought ? '#88917e' : '#edca77', 'center', 700);
     text(ctx, item.bought ? '—' : 'CLICK TO BUY', r.x + r.w / 2, r.y + 97, 5, '#a5b29b', 'center', 500);
   });
-  text(ctx, 'F OR CLICK OUTSIDE TO LEAVE', 240, 214, 6, '#a8b39f', 'center', 500);
+  text(ctx, 'E OR CLICK OUTSIDE TO LEAVE', 240, 214, 6, '#a8b39f', 'center', 500);
 }
 
 export function drawEvent(ctx, game) {
@@ -289,12 +251,12 @@ export function drawBuild(ctx, game) {
   ctx.fillStyle = 'rgba(6,12,13,.84)'; ctx.fillRect(0, 0, WIDTH, HEIGHT);
   panel(ctx, 24, 24, 432, 218, { fill: '#192928', border: '#71835e' });
   text(ctx, 'FIELD NOTES · YOUR BUILD', 240, 34, 12, '#f0dfb7', 'center', 800);
-  const hero = HEROES[game.run.heroId];
-  drawHeroPortrait(ctx, hero.id, 58, 84, 1.1);
-  text(ctx, `${hero.name.toUpperCase()}  /  ${hero.title}`, 83, 57, 7, '#e6d4a8', 'left', 700);
-  text(ctx, `HP ${Math.ceil(game.run.player.hp)} / ${game.run.player.maxHp}`, 83, 72, 6, '#d8bcb0', 'left', 500);
-  text(ctx, `SPEED ${Math.round(game.run.player.speed)}  ·  CRIT ${Math.round(game.run.player.crit * 100)}%`, 83, 83, 6, '#9fb39f', 'left', 500);
-  text(ctx, `DAMAGE DEALT ${game.run.stats.damageDealt}  ·  ARMOR ${game.run.player.armor}`, 83, 94, 6, '#9fb39f', 'left', 500);
+  const classInfo = CLASSES[game.run.classId];
+  drawClassPortrait(ctx, classInfo.id, 58, 84, 1.1);
+  text(ctx, `${classInfo.name.toUpperCase()}  /  ${classInfo.title}`, 83, 57, 7, '#e6d4a8', 'left', 700);
+  text(ctx, `HEALTH ${Math.ceil(game.run.player.hp)} / ${game.run.player.maxHp}`, 83, 72, 6, '#d8bcb0', 'left', 500);
+  text(ctx, `ARMOR ${game.run.player.armor}  ·  ENERGY ${Math.floor(game.run.player.currentEnergy)} / ${game.run.player.maxEnergy}`, 83, 83, 6, '#8ed0be', 'left', 500);
+  text(ctx, `DAMAGE DEALT ${game.run.stats.damageDealt}  ·  SPEED ${Math.round(game.run.player.speed)}  ·  CRIT ${Math.round(game.run.player.crit * 100)}%`, 83, 94, 5, '#9fb39f', 'left', 500);
   panel(ctx, 35, 117, 196, 91, { fill: '#213330', border: '#526550' });
   text(ctx, 'CARRIED WEAPONS', 47, 126, 6, '#a8b49d', 'left', 600);
   game.run.weapons.forEach((id, i) => {
@@ -363,18 +325,18 @@ export function drawHelp(ctx, game) {
   drawHeader(ctx, 'FIELD GUIDE', 'A few good habits for the Gloam.');
   panel(ctx, 36, 68, 408, 169, { fill: '#192a29', border: '#55694f' });
   const left = [
-    ['MOVE', 'WASD / arrows — eight directions; walls and stone stop you.'],
-    ['AIM & ATTACK', 'Mouse aim + left-click, or press Z to attack.'],
+    ['MOVE', 'WASD or arrow keys — eight directions; walls stop you.'],
+    ['AIM & ATTACK', 'Mouse to aim; left-click or Space to attack.'],
     ['DODGE', 'Shift — brief invulnerability; mind the recovery.'],
-    ['CHARACTER SKILL', 'E — a room-changing move with its own cooldown.'],
-    ['INTERACT', 'F near a chest, altar, shop counter, or exit.'],
+    ['CLASS SKILL', 'Q spends Energy; it regenerates over time.'],
+    ['INTERACT', 'E near chests, altars, stations, or the exit.'],
   ];
   const right = [
-    ['WEAPON SWAP', 'Q swaps your two carried weapons; 1 / 2 selects.'],
-    ['BUILD NOTES', 'Tab opens your current weapons, stats and knot synergies.'],
+    ['WEAPON SLOTS', '1 selects primary; 2 selects secondary.'],
+    ['BUILD & INVENTORY', 'Tab opens weapons, stats and knot synergies.'],
+    ['DIALOGUE', 'Space advances or skips a line; dialogue never fires an attack.'],
     ['ROOM ROUTES', 'The minimap shows visited rooms and reachable branches.'],
-    ['LEVEL UP', 'Choose one of three knots; the fight pauses while you decide.'],
-    ['SEED', 'Pause to see a run seed. Same seed reproduces the room graph.'],
+    ['PAUSE', 'Esc pauses or resumes; run seeds reproduce the room graph.'],
   ];
   [left, right].forEach((col, j) => col.forEach(([title, desc], i) => {
     const x = 51 + j * 196; const y = 82 + i * 29;
@@ -390,7 +352,7 @@ export function drawResults(ctx, game) {
   const won = run.outcome === 'victory';
   panel(ctx, 26, 22, 428, 226, { fill: '#172827', border: won ? '#ddb967' : '#8b6654' });
   text(ctx, won ? 'THE GLOAM REMEMBERS' : 'THE LANTERN GOES QUIET', 240, 34, 15, won ? '#f2d17f' : '#e8aa8c', 'center', 800);
-  text(ctx, `${HEROES[run.heroId].name}  ·  ${won ? 'EXPEDITION COMPLETE' : 'EXPEDITION ENDED'}  ·  SEED ${run.seed}`, 240, 56, 6, '#a5b39c', 'center', 500);
+  text(ctx, `${CLASSES[run.classId].name}  ·  ${won ? 'EXPEDITION COMPLETE' : 'EXPEDITION ENDED'}  ·  SEED ${run.seed}`, 240, 56, 6, '#a5b39c', 'center', 500);
   const stats = [
     ['FLOOR REACHED', `${run.floor} / 3`], ['ROOMS CLEARED', run.stats.roomsCleared], ['FOES DEFEATED', run.stats.enemiesDefeated],
     ['BOSSES DEFEATED', run.stats.bossesDefeated], ['DAMAGE DEALT', Math.round(run.stats.damageDealt)], ['DAMAGE TAKEN', Math.round(run.stats.damageTaken)],

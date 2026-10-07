@@ -31,7 +31,7 @@ function forceWalk(game, path) {
 test('shop, phase boss, relic chest, portal, and next-floor loop work together', () => {
   const game = createGame();
   try {
-    game.startNewRun('luma');
+    game.startNewRun('ranger');
     const shopPath = pathTo(game.map, 'shop');
     assert.ok(shopPath);
     forceWalk(game, shopPath);

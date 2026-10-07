@@ -1,18 +1,23 @@
-import { HEIGHT, WIDTH, clamp } from './constants.js';
+import { CANVAS_HEIGHT, CANVAS_WIDTH, HEIGHT, RENDER_SCALE, WIDTH, clamp } from './constants.js';
 import { ENEMIES } from './content.js';
 import { makeRng } from './rng.js';
 import { loadSave, persistSave } from './save.js';
 import { Sound } from './audio.js';
 import { Input } from './input.js';
 import * as UI from './ui.js';
-import { drawBackdrop, drawRoom, drawChest, drawDrop, drawEnemy, drawHero, drawProp, drawProjectile, panel, text } from './art.js';
+import { drawBackdrop, drawRoom, drawChest, drawDrop, drawEnemy, drawClassSprite, drawProp, drawProjectile, panel, text } from './art.js';
 import { RewardSystems } from './systems/RewardSystems.js';
+import { enterHubRoom, renderHub, updateHub } from './hub.js';
 
 export class Game extends RewardSystems {
 
   constructor(canvas) {
     super();
     this.canvas = canvas;
+    this.canvas.width = CANVAS_WIDTH;
+    this.canvas.height = CANVAS_HEIGHT;
+    this.canvas.style ||= {};
+    this.resizeCanvas();
     this.ctx = canvas.getContext('2d', { alpha: false });
     this.ctx.imageSmoothingEnabled = false;
     this.input = new Input(canvas);
@@ -28,8 +33,14 @@ export class Game extends RewardSystems {
     this.lastFrame = 0;
     this.raf = 0;
     this.menuFocus = 'start';
-    this.selectedHero = 'sable';
-    this.lastHero = 'sable';
+    this.selectedClass = this.save.lastClass || 'vanguard';
+    this.lastClass = this.save.lastClass || 'vanguard';
+    this.preparedWeapon = this.save.preparedWeapon || null;
+    this.hubRoom = 'sanctum';
+    this.hubPlayer = { x: 240, y: 188, aim: { x: 1, y: 0 }, moving: false };
+    this.hubOverlay = 'none';
+    this.hubPrompt = '';
+    this.ticketChoices = [];
     this.menuParticles = [];
     this.toast = '';
     this.toastTimer = 0;
@@ -53,11 +64,20 @@ export class Game extends RewardSystems {
     this.resultMessage = '';
     this.lastTimestamp = 0;
     this.inFrame = false;
-    this.boundResize = () => { this.ctx.imageSmoothingEnabled = false; };
+    this.boundResize = () => { this.resizeCanvas(); this.ctx.imageSmoothingEnabled = false; };
     window.addEventListener('resize', this.boundResize);
     document.addEventListener('visibilitychange', this.onVisibility = () => {
       if (document.hidden && this.screen === 'run' && this.overlay === 'none') this.overlay = 'pause';
     });
+  }
+
+  resizeCanvas() {
+    const viewportWidth = Math.max(320, window.innerWidth || CANVAS_WIDTH);
+    const viewportHeight = Math.max(180, window.innerHeight || CANVAS_HEIGHT);
+    const fit = Math.min(viewportWidth / CANVAS_WIDTH, viewportHeight / CANVAS_HEIGHT);
+    const scale = fit >= 1 ? Math.max(1, Math.floor(fit)) : fit;
+    this.canvas.style.width = `${CANVAS_WIDTH * scale}px`;
+    this.canvas.style.height = `${CANVAS_HEIGHT * scale}px`;
   }
 
   start() {
@@ -92,21 +112,20 @@ export class Game extends RewardSystems {
     if (this.screen === 'menu') {
       if (this.input.wasPressed('arrowdown') || this.input.wasPressed('s')) this.moveMenuFocus(1);
       if (this.input.wasPressed('arrowup') || this.input.wasPressed('w')) this.moveMenuFocus(-1);
-      if (this.input.wasPressed('enter') || this.input.wasPressed(' ')) this.activateMenu(this.menuFocus);
+      if (this.input.wasPressed('enter') || this.input.wasPressed('space')) this.activateMenu(this.menuFocus);
       if (this.input.pointer.pressed) this.handleMenuClick();
       return;
     }
     if (this.screen === 'select') {
-      if (this.input.wasPressed('arrowleft') || this.input.wasPressed('a')) this.selectedHero = 'sable';
-      if (this.input.wasPressed('arrowright') || this.input.wasPressed('d')) this.selectedHero = 'luma';
-      if (this.input.wasPressed('enter')) this.startNewRun(this.selectedHero);
+      if (this.input.wasPressed('arrowleft') || this.input.wasPressed('a')) this.selectedClass = 'vanguard';
+      if (this.input.wasPressed('arrowright') || this.input.wasPressed('d')) this.selectedClass = 'ranger';
+      if (this.input.wasPressed('enter') || this.input.wasPressed('space')) this.startNewRun(this.selectedClass);
       if (this.input.wasPressed('escape')) this.screen = 'menu';
       if (this.input.pointer.pressed) this.handleSelectClick();
       return;
     }
     if (this.screen === 'hub') {
-      if (this.input.wasPressed('escape')) this.screen = 'menu';
-      if (this.input.pointer.pressed) this.handleHubClick();
+      updateHub(this, dt);
       return;
     }
     if (this.screen === 'settings') {
@@ -119,7 +138,9 @@ export class Game extends RewardSystems {
       return;
     }
     if (this.screen === 'results') {
-      if (this.input.wasPressed('enter')) this.screen = 'hub';
+      if (this.input.wasPressed('enter') || this.input.wasPressed('space')) {
+        enterHubRoom(this, 'sanctum'); this.screen = 'hub'; this.sound.setTrack('hub');
+      }
       if (this.input.pointer.pressed) this.handleResultsClick();
       return;
     }
@@ -128,7 +149,6 @@ export class Game extends RewardSystems {
     if (this.overlay === 'none') {
       if (this.input.wasPressed('escape')) { this.overlay = 'pause'; return; }
       if (this.input.wasPressed('tab')) { this.overlay = 'build'; return; }
-      if (this.input.wasPressed('m')) { this.overlay = 'build'; return; }
       if (this.input.pointer.pressed) this.handleRunHudClick();
       this.updateRun(dt);
       return;
@@ -168,8 +188,13 @@ export class Game extends RewardSystems {
   activateMenu(id) {
     this.sound.unlock();
     this.sound.play('menu');
-    if (id === 'start') { this.selectedHero = this.lastHero || 'sable'; this.screen = 'select'; }
-    else if (id === 'hub') { this.screen = 'hub'; this.sound.setTrack('hub'); }
+    if (id === 'start') {
+      this.selectedClass = this.save.lastClass || this.lastClass || 'vanguard';
+      enterHubRoom(this, 'sanctum'); this.screen = 'hub'; this.sound.setTrack('hub');
+    } else if (id === 'hub') {
+      this.selectedClass = this.save.lastClass || this.lastClass || 'vanguard';
+      enterHubRoom(this, 'classes'); this.screen = 'hub'; this.sound.setTrack('hub');
+    }
     else if (id === 'help') { this.returnScreen = 'menu'; this.screen = 'help'; }
     else if (id === 'collection') { this.returnScreen = 'menu'; this.screen = 'collection'; }
     else if (id === 'settings') this.openSettings('menu', 'none');
@@ -178,28 +203,9 @@ export class Game extends RewardSystems {
 
   handleSelectClick() {
     const card = UI.SELECT_CARDS.find((item) => UI.inside(this.input.pointer.x, this.input.pointer.y, item));
-    if (card) { this.selectedHero = card.id; this.sound.play('menu', .45); }
+    if (card) { this.selectedClass = card.id; this.sound.play('menu', .45); }
     if (UI.inside(this.input.pointer.x, this.input.pointer.y, UI.SELECT_BUTTONS[0])) this.screen = 'menu';
-    if (UI.inside(this.input.pointer.x, this.input.pointer.y, UI.SELECT_BUTTONS[1])) this.startNewRun(this.selectedHero);
-  }
-
-  handleHubClick() {
-    const b = UI.HUB_BUTTONS.find((item) => UI.inside(this.input.pointer.x, this.input.pointer.y, item));
-    if (!b) return;
-    if (b.id === 'start') { this.selectedHero = this.lastHero || 'sable'; this.screen = 'select'; }
-    else if (b.id === 'upgrade') this.buyPermanentHeart();
-    else if (b.id === 'collection') { this.returnScreen = 'hub'; this.screen = 'collection'; }
-    else if (b.id === 'menu') { this.screen = 'menu'; this.sound.setTrack('menu'); }
-  }
-
-  buyPermanentHeart() {
-    if (this.save.permanentHp >= 5) return this.showToast('The forge has reached its limit.');
-    if (this.save.memory < 12) return this.showToast('The forge asks for 12 Memory Shards.');
-    this.save.memory -= 12;
-    this.save.permanentHp += 1;
-    persistSave(this.save);
-    this.sound.play('level');
-    this.showToast('A permanent heart-knot is woven into the ledger.');
+    if (UI.inside(this.input.pointer.x, this.input.pointer.y, UI.SELECT_BUTTONS[1])) this.startNewRun(this.selectedClass);
   }
 
   openSettings(screen, overlay) {
@@ -242,8 +248,8 @@ export class Game extends RewardSystems {
   handleResultsClick() {
     const item = UI.RESULTS_BUTTONS.find((b) => UI.inside(this.input.pointer.x, this.input.pointer.y, b));
     if (!item) return;
-    if (item.id === 'again') { this.selectedHero = this.endedRun.heroId; this.screen = 'select'; }
-    else { this.screen = 'hub'; this.sound.setTrack('hub'); }
+    if (item.id === 'again') this.selectedClass = this.endedRun.classId;
+    enterHubRoom(this, 'sanctum'); this.screen = 'hub'; this.sound.setTrack('hub');
   }
 
   updateRunOverlay() {
@@ -255,7 +261,7 @@ export class Game extends RewardSystems {
       if (b.id === 'resume') this.overlay = 'none';
       else if (b.id === 'build') this.overlay = 'build';
       else if (b.id === 'settings') this.openSettings('run', 'pause');
-      else if (b.id === 'restart') this.startNewRun(this.run.heroId);
+      else if (b.id === 'restart') this.startNewRun(this.run.classId);
       else if (b.id === 'hub') this.endRun('retreat');
       return;
     }
@@ -275,7 +281,7 @@ export class Game extends RewardSystems {
       return;
     }
     if (this.overlay === 'shop') {
-      if (this.input.wasPressed('escape') || this.input.wasPressed('f')) { this.overlay = 'none'; return; }
+      if (this.input.wasPressed('escape') || this.input.wasPressed('e')) { this.overlay = 'none'; return; }
       if (!this.input.pointer.pressed) return;
       const i = UI.SHOP_CARDS.findIndex((r) => UI.inside(this.input.pointer.x, this.input.pointer.y, r));
       if (i >= 0) this.buyShopItem(i);
@@ -295,32 +301,31 @@ export class Game extends RewardSystems {
 
   handleRunHudClick() {
     const x = this.input.pointer.x; const y = this.input.pointer.y;
-    if (y >= 222 && y <= 249) {
-      if (x >= 34 && x <= 53) this.run.activeSlot = 0;
-      else if (x >= 62 && x <= 82) this.run.activeSlot = 1;
-      else if (x >= 129 && x <= 155) this.activateSkill();
+    if (y >= 233 && y <= 254) {
+      if (x >= 13 && x <= 34) this.run.activeSlot = 0;
+      else if (x >= 71 && x <= 93) this.run.activeSlot = 1;
     }
+    if (x >= 142 && x <= 187 && y >= 8 && y <= 27) this.activateSkill();
   }
 
   render() {
     const ctx = this.ctx;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
     ctx.imageSmoothingEnabled = false;
     const shake = (this.screenShake || 0) > 0 && this.screen === 'run';
+    ctx.clearRect(0, 0, WIDTH, HEIGHT);
     if (shake) {
       ctx.translate(Math.sin(this.time * 73) * 2, Math.cos(this.time * 61) * 1.5);
       this.screenShake = Math.max(0, this.screenShake - .025);
     }
-    ctx.clearRect(-5, -5, WIDTH + 10, HEIGHT + 10);
     if (this.screen === 'menu') {
       drawBackdrop(ctx, this.time, this.menuParticles);
       UI.drawMenu(ctx, this);
     } else if (this.screen === 'select') {
       drawBackdrop(ctx, this.time, this.menuParticles);
-      UI.drawCharacterSelect(ctx, this);
+      UI.drawClassSelect(ctx, this);
     } else if (this.screen === 'hub') {
-      drawBackdrop(ctx, this.time, this.menuParticles);
-      UI.drawHub(ctx, this);
+      renderHub(ctx, this);
     } else if (this.screen === 'collection') {
       drawBackdrop(ctx, this.time, this.menuParticles);
       UI.drawCollection(ctx, this);
@@ -333,7 +338,7 @@ export class Game extends RewardSystems {
     } else if (this.screen === 'results' && this.endedRun) {
       UI.drawResults(ctx, this);
     } else if (this.screen === 'run' && this.run && this.currentRoom) this.renderRun(ctx);
-    if (shake) { ctx.setTransform(1, 0, 0, 1, 0, 0); }
+    ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
   }
 
   renderRun(ctx) {
@@ -351,7 +356,7 @@ export class Game extends RewardSystems {
     actors.sort((a, b) => a.y - b.y);
     for (const actor of actors) {
       if (actor.kind === 'enemy') drawEnemy(ctx, actor.value, this.time);
-      else drawHero(ctx, this.run.heroId, actor.value.x, actor.value.y, actor.value.aim, this.time, actor.value.moving, actor.value.invuln, actor.value.attackAnim, actor.value.skillAnim);
+      else drawClassSprite(ctx, this.run.classId, actor.value.x, actor.value.y, actor.value.aim, this.time, actor.value.moving, actor.value.invuln, actor.value.attackAnim, actor.value.skillAnim);
     }
     for (const projectile of room.projectiles) drawProjectile(ctx, projectile);
     for (const p of room.particles) {

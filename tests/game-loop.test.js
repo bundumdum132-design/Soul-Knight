@@ -17,7 +17,7 @@ function createGame() {
 test('playable run connects combat, room-clear chest, level choice, and permanent results', () => {
   const game = createGame();
   try {
-    game.startNewRun('sable');
+    game.startNewRun('vanguard');
     assert.equal(game.screen, 'run');
     assert.equal(game.currentNode.type, 'start');
 
